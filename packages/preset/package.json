@@ -1,6 +1,6 @@
 {
   "name": "@bastant/rollup-preset",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Rollup preset for solid libraries",
   "files": [
     "lib"

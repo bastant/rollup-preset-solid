@@ -131,7 +131,7 @@ export function visitStatements(
         if (exports) {
           const o = [...Object.entries(exports)].map(([k, v]) => {
             return ctx.factory.createPropertyAssignment(
-              k,
+              ctx.factory.createStringLiteral(k),
               ctx.factory.createStringLiteral(v.name)
             );
           });
