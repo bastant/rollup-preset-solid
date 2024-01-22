@@ -3,11 +3,17 @@ import * as c from "colorette";
 import { cwd } from "node:process";
 import terser from "@rollup/plugin-terser";
 import { mergeAndConcat } from "merge-anything";
-import { resolve, dirname, parse } from "node:path";
+import { resolve, dirname, parse, join } from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { writeFileSync, rmSync, readFileSync } from "node:fs";
 import { ModuleFormat, OutputOptions, RollupOptions } from "rollup";
 import { babel, RollupBabelInputPluginOptions } from "@rollup/plugin-babel";
+import * as sass from "sass";
+import postcss from "rollup-plugin-postcss";
+import fs from "node:fs/promises";
+import * as resolver from "resolve";
+
+import { compileSsass, getUrlOfPartial, transform } from "./transformer.js";
 
 function findClosestPackageJson(start = cwd(), level = 0) {
   try {
@@ -89,6 +95,24 @@ function processOptions(options: Options, asSubPackage = true): RollupOptions {
     external: ["solid-js", "solid-js/web", "solid-js/store", ...external],
     output,
     plugins: [
+      postcss({
+        autoModules: true,
+        use: ["scss"],
+        loaders: [
+          {
+            name: "scss",
+            test: /\.(sass|scss)$/,
+            async process({ code }) {
+              const compiled = compileSsass(this.id, code, false);
+
+              return { code: compiled };
+            },
+          },
+        ],
+        sourceMap: false,
+        extract: false,
+        extensions: [".sass", "'.scss", ".css"],
+      }),
       babel({
         extensions,
         babelHelpers: "bundled",
@@ -102,11 +126,13 @@ function processOptions(options: Options, asSubPackage = true): RollupOptions {
       nodeResolve({ extensions }),
       {
         name: "ts",
-        buildEnd() {
+        async buildEnd() {
+          const styling = [];
+
           const program = ts.createProgram([resolve(src)], {
             target: ts.ScriptTarget.ESNext,
             module: ts.ModuleKind.ESNext,
-            moduleResolution: ts.ModuleResolutionKind.NodeJs,
+            moduleResolution: ts.ModuleResolutionKind.NodeNext,
             jsx: ts.JsxEmit.Preserve,
             jsxImportSource: "solid-js",
             allowSyntheticDefaultImports: true,
@@ -117,7 +143,20 @@ function processOptions(options: Options, asSubPackage = true): RollupOptions {
             allowJs: true,
           });
 
-          program.emit();
+          program.emit(void 0, void 0, void 0, void 0, {
+            before: [transform(styling, name)],
+          });
+
+          await Promise.all(
+            styling.map(({ path, code }) => {
+              return fs.writeFile(
+                asSubPackage
+                  ? join(`dist/${name}`, path)
+                  : join("dist/source", path),
+                code
+              );
+            })
+          );
         },
       },
       {
