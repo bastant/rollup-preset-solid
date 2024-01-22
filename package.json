@@ -3,8 +3,11 @@
   "version": "2.0.1",
   "description": "Rollup preset for solid libraries",
   "private": true,
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
-    "build": "pnpm run --filter @bastant/rollup build",
-    "watch": "pnpm run --filter @bastant/rollup watch"
+    "build": "pnpm run --filter @bastant/rollup-preset build",
+    "watch": "pnpm run --filter @bastant/rollup-preset watch"
   }
 }

@@ -1,10 +1,14 @@
 {
-  "name": "@bastant/rollup",
-  "version": "2.0.1",
+  "name": "@bastant/rollup-preset",
+  "version": "0.1.0",
   "description": "Rollup preset for solid libraries",
   "files": [
-    "dist"
+    "lib"
   ],
+  "repository": "https://github.com/bastant/rollup-preset-solid",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "type": "module",
   "main": "lib/index.js",
   "module": "lib/index.js",
@@ -15,7 +19,7 @@
     "default": "./lib/index.js",
     "require": "./lib/index.js"
   },
-  "types": "dist/index.d.ts",
+  "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
