@@ -95,6 +95,8 @@ export function visitStatements(
           (stmt.moduleSpecifier as ts.StringLiteral).text
         );
 
+        if (!EXT.includes(ext)) return stmt;
+
         const resolvePath = Path.join(
           directory,
           (stmt.moduleSpecifier as ts.StringLiteral).text
