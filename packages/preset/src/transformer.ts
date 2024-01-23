@@ -1,14 +1,9 @@
-import ts, {
-  TransformationContext,
-  TransformerFactory,
-  Node,
-  Transformer,
-} from "typescript";
+import ts, { TransformationContext, Transformer } from "typescript";
 import * as Path from "node:path";
 import { transform as cssTransform } from "lightningcss";
 import * as sass from "sass";
 import fs from "node:fs";
-import resolve from "resolve";
+import resolve, { type SyncOpts } from "resolve";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const EXT = [".css", ".scss", ".less", ".styl"];
@@ -18,7 +13,18 @@ export const getUrlOfPartial = (url: string) => {
   return `${parsedUrl.dir}${Path.sep}_${parsedUrl.base}`;
 };
 
-export function compileSsass(importer: string, buffer: string, ident: boolean) {
+function parseExports(pkg: any) {
+  if (!pkg.exports) return null;
+
+  const exp = pkg.exports?.["."];
+  if (!exp) return null;
+
+  if (exp.sass) {
+    return exp.sass;
+  }
+}
+
+export function compileSass(importer: string, buffer: string, ident: boolean) {
   const ret = sass.compileString(buffer, {
     syntax: ident ? "indented" : "scss",
     importers: [
@@ -36,18 +42,30 @@ export function compileSsass(importer: string, buffer: string, ident: boolean) {
           const options = {
             basedir: Path.dirname(impor),
             extensions: [".scss", ".sass", ".css"],
-          };
+            includeCoreModules: false,
+            packageFilter(pkg, file, dir) {
+              const exported = parseExports(pkg);
+              if (exported) {
+                pkg.main = exported;
+              }
+              return pkg;
+            },
+            pathFilter(pkg, path, relativePath) {
+              const ext = Path.extname(relativePath);
+              if (!ext) {
+                relativePath += ".scss";
+              }
 
-          let resolved;
+              return relativePath;
+            },
+          } satisfies SyncOpts;
+
+          let resolved: string | undefined;
 
           try {
-            resolved = resolve.sync(partialUrl, options);
+            resolved = resolve.sync(moduleUrl, options);
           } catch {
-            try {
-              resolved = resolve.sync(moduleUrl, options);
-            } catch {
-              return null;
-            }
+            return null;
           }
 
           return pathToFileURL(resolved);
@@ -61,7 +79,7 @@ export function compileSsass(importer: string, buffer: string, ident: boolean) {
 
 function preprocessStyling(path: string, ext: string, buffer: string) {
   if (ext == ".scss" || ext == ".sass") {
-    return compileSsass(path, buffer, ext == ".sass");
+    return compileSass(path, buffer, ext == ".sass");
   }
 
   return buffer;
@@ -82,6 +100,7 @@ function getStyleIdent(decl: ts.ImportDeclaration) {
 }
 
 export function visitStatements(
+  root: string,
   directory: string,
   ctx: TransformationContext,
   stmts: ts.NodeArray<ts.Statement>,
@@ -120,13 +139,23 @@ export function visitStatements(
         });
 
         let outputName =
-          "." + resolvePath.replace(directory, "").replace(ext, ".css");
+          "." +
+          resolvePath
+            .replace(directory, "")
+            .replace(".module.", ".")
+            .replace(ext, ".css");
 
         if (isModule) {
           outputName = outputName.replace(".module.", ".");
         }
 
-        css.push({ path: outputName, code });
+        css.push({
+          path: resolvePath
+            .replace(root, "")
+            .replace(".module.", ".")
+            .replace(ext, ".css"),
+          code,
+        });
 
         if (exports) {
           const o = [...Object.entries(exports)].map(([k, v]) => {
@@ -179,6 +208,7 @@ export function visitStatements(
 }
 
 export function transform(
+  root: string,
   css: { path: string; code: Uint8Array }[],
   libraryName?: string
 ) {
@@ -187,17 +217,18 @@ export function transform(
       if (ts.isSourceFile(node)) {
         const dir = Path.dirname(node.fileName);
         const stmts = visitStatements(
+          root,
           dir,
           ctx,
           node.statements,
           css,
           libraryName
         );
+
         return ctx.factory.updateSourceFile(node, stmts);
       }
 
       return node;
     };
   };
-  // https://github.com/elsassph/react-hot-ts/blob/master/lib/transformer.ts
 }

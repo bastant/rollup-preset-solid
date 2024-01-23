@@ -8,12 +8,12 @@ import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { writeFileSync, rmSync, readFileSync } from "node:fs";
 import { ModuleFormat, OutputOptions, RollupOptions } from "rollup";
 import { babel, RollupBabelInputPluginOptions } from "@rollup/plugin-babel";
-import * as sass from "sass";
 import postcss from "rollup-plugin-postcss";
 import fs from "node:fs/promises";
-import * as resolver from "resolve";
+import autoprefixer from "autoprefixer";
 
-import { compileSsass, getUrlOfPartial, transform } from "./transformer.js";
+import { compileSass, transform } from "./transformer.js";
+import { mkdirp } from "mkdirp";
 
 function findClosestPackageJson(start = cwd(), level = 0) {
   try {
@@ -98,12 +98,13 @@ function processOptions(options: Options, asSubPackage = true): RollupOptions {
       postcss({
         autoModules: true,
         use: ["scss"],
+        plugins: [autoprefixer()],
         loaders: [
           {
             name: "scss",
             test: /\.(sass|scss)$/,
             async process({ code }) {
-              const compiled = compileSsass(this.id, code, false);
+              const compiled = compileSass(this.id, code, false);
 
               return { code: compiled };
             },
@@ -111,6 +112,7 @@ function processOptions(options: Options, asSubPackage = true): RollupOptions {
         ],
         sourceMap: false,
         extract: false,
+        minimize: true,
         extensions: [".sass", "'.scss", ".css"],
       }),
       babel({
@@ -129,7 +131,10 @@ function processOptions(options: Options, asSubPackage = true): RollupOptions {
         async buildEnd() {
           const styling = [];
 
-          const program = ts.createProgram([resolve(src)], {
+          const resolvedSrc = resolve(src);
+          const root = dirname(resolvedSrc);
+
+          const program = ts.createProgram([resolvedSrc], {
             target: ts.ScriptTarget.ESNext,
             module: ts.ModuleKind.ESNext,
             moduleResolution: ts.ModuleResolutionKind.NodeNext,
@@ -144,17 +149,18 @@ function processOptions(options: Options, asSubPackage = true): RollupOptions {
           });
 
           program.emit(void 0, void 0, void 0, void 0, {
-            before: [transform(styling, name)],
+            before: [transform(root, styling, name)],
           });
 
           await Promise.all(
-            styling.map(({ path, code }) => {
-              return fs.writeFile(
-                asSubPackage
-                  ? join(`dist/${name}`, path)
-                  : join("dist/source", path),
-                code
-              );
+            styling.map(async ({ path, code }) => {
+              const fullPath = asSubPackage
+                ? join(`dist/${name}`, path)
+                : join("dist/source", path);
+
+              await mkdirp(dirname(fullPath));
+
+              await fs.writeFile(fullPath, code);
             })
           );
         },
