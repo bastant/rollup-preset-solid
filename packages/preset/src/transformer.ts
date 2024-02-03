@@ -27,6 +27,7 @@ function parseExports(pkg: any) {
 export function compileSass(importer: string, buffer: string, ident: boolean) {
   const ret = sass.compileString(buffer, {
     syntax: ident ? "indented" : "scss",
+    loadPaths: [Path.dirname(importer)],
     importers: [
       {
         findFileUrl(url, ctx) {
