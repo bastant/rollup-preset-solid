@@ -131,8 +131,8 @@ export function visitStatements(
           cssModules: isModule
             ? {
                 pattern: libraryName
-                  ? `${libraryName}_[local]_[hash]`
-                  : "[local]_[hash]",
+                  ? `${libraryName}_[hash]__[local]`
+                  : "[hash]__[local]",
               }
             : false,
           filename: resolvePath,
